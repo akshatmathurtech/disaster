@@ -1,0 +1,133 @@
+{
+  "area": {
+    "id": "assam-demo",
+    "name": "Guwahati, Assam",
+    "center": {
+      "lat": 26.1445,
+      "lng": 91.7362
+    },
+    "boundary_polygon": [
+      [26.1900, 91.6900],
+      [26.1900, 91.7900],
+      [26.1000, 91.7900],
+      [26.1000, 91.6900]
+    ]
+  },
+
+  "water_sources": [
+  {
+    "id": "water-brahmaputra",
+    "name": "Brahmaputra River",
+    "type": "RIVER",
+    "location": {
+      "lat": 26.1827,
+      "lng": 91.7450
+    },
+    "risk_radius_meters": 2500
+  },
+  {
+    "id": "water-dhansiri",
+    "name": "Dhansiri River",
+    "type": "RIVER",
+    "location": {
+      "lat": 26.4700,
+      "lng": 93.9500
+    },
+    "risk_radius_meters": 2500
+  },
+  {
+    "id": "water-kushiyara",
+    "name": "Kushiyara River",
+    "type": "RIVER",
+    "location": {
+      "lat": 24.9000,
+      "lng": 92.4500
+    },
+    "risk_radius_meters": 2500
+  }
+ ],
+
+  "infrastructure": [
+    {
+      "id": "bridge-saraighat-01",
+      "type": "BRIDGE",
+      "name": "Saraighat Bridge",
+      "location": {
+        "lat": 26.1660,
+        "lng": 91.7000
+      },
+      "status": "OPEN",
+      "last_verified": "2026-08-12T12:00:00Z",
+      "confidence": 0.95
+    },
+    {
+      "id": "road-nh27-01",
+      "type": "ROAD",
+      "name": "NH-27 Guwahati Corridor",
+      "location": {
+        "lat": 26.1400,
+        "lng": 91.7300
+      },
+      "status": "OPEN",
+      "last_verified": "2026-08-12T12:30:00Z",
+      "confidence": 0.94
+    },
+    {
+      "id": "road-gs-road-01",
+      "type": "ROAD",
+      "name": "G.S. Road",
+      "location": {
+        "lat": 26.1500,
+        "lng": 91.7700
+      },
+      "status": "OPEN",
+      "last_verified": "2026-08-12T12:45:00Z",
+      "confidence": 0.96
+    },
+    {
+      "id": "shelter-guwahati-01",
+      "type": "SHELTER",
+      "name": "Guwahati Emergency Relief Center",
+      "location": {
+        "lat": 26.1450,
+        "lng": 91.7350
+      },
+      "status": "AVAILABLE",
+      "last_verified": "2026-08-12T13:00:00Z",
+      "confidence": 0.91
+    }
+  ],
+
+  "incidents": [
+    {
+      "id": "inc-assam-1",
+      "name": "Brahmaputra Flood",
+      "severity": "CRITICAL",
+      "location": {
+        "lat": 26.1650,
+        "lng": 91.7450
+      }
+    }
+  ],
+
+  "field_units": [
+    {
+      "id": "unit-assam-01",
+      "callsign": "Guwahati EOC Unit 01",
+      "location": {
+        "lat": 26.1445,
+        "lng": 91.7362
+      },
+      "status": "ACTIVE"
+    },
+    {
+      "id": "unit-assam-02",
+      "callsign": "Guwahati Rescue Unit 02",
+      "location": {
+        "lat": 26.1600,
+        "lng": 91.7500
+      },
+      "status": "STANDBY"
+    }
+  ]
+}
