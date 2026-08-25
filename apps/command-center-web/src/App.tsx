@@ -11,7 +11,9 @@ import MediaWindow from './components/windows/MediaWindow';
 import IncidentDetailWindow, { IncidentData } from './components/windows/IncidentDetailWindow';
 import AlertFeedWindow from './components/windows/AlertFeedWindow';
 import ResourceBoardWindow from './components/windows/ResourceBoardWindow';
+import RouteFinderWindow from './components/windows/RouteFinderWindow';
 import { SCRIPTED_TIMELINE, SimEvent } from './services/DisasterEngine';
+import { RouteDetail } from '@disaster/protocol';
 
 
 /* ── Type Definitions ─────────────────────────────────────────────── */
@@ -170,6 +172,10 @@ export default function App() {
   const [selIncident, setSelIncident] = useState<IncidentData | null>(null);
   const [activeTab,   setActiveTab]   = useState<'tactical' | 'uncertainty' | 'grid'>('tactical');
   const [apiOnline,   setApiOnline]   = useState(false);
+
+  // Emergency 5-Route Engine State
+  const [routes,          setRoutes]          = useState<RouteDetail[]>([]);
+  const [selectedRouteId, setSelectedRouteId] = useState<number | null>(1);
 
   const [layers, setLayers] = useState({
     infrastructure: true,
@@ -631,6 +637,9 @@ export default function App() {
               areaData={areaData}
               entities={entities}
               conflicts={conflicts}
+              routes={routes}
+              selectedRouteId={selectedRouteId}
+              onSelectRoute={(id) => setSelectedRouteId(id)}
               activeLayers={{
                 ...layers,
                 uncertainty: activeTab === 'uncertainty' || layers.uncertainty,
@@ -771,7 +780,7 @@ export default function App() {
 
       {/* ══ BOTTOM DOCK BAR (DYNAMIC WINDOW CONTROLLER) ══════════════ */}
       <footer className="eoc-dock">
-        {(['commandAI', 'inspector', 'comms', 'media', 'incident', 'grid'] as const).map(id => {
+        {(['routeFinder', 'commandAI', 'inspector', 'comms', 'media', 'incident', 'grid'] as const).map(id => {
           const w = windows[id];
           const isActive = w.isOpen && !w.isMinimized;
           return (
@@ -780,7 +789,8 @@ export default function App() {
               className={`dock-btn ${isActive ? 'active' : w.isOpen ? 'minimized' : ''}`}
               onClick={() => toggleWindow(id)}
             >
-              {w.icon} {w.title.replace(/^(🤖|🔎|📡|📷|🚨|📊)\s*/, '')}
+              {w.icon} {w.title.replace(/^(🤖|🔎|📡|📷|🚨|📊|🧭)\s*/, '')}
+              {id === 'routeFinder' && <span className="dock-badge">5</span>}
               {id === 'comms' && <span className="dock-badge">3</span>}
               {id === 'media' && <span className="dock-badge">LIVE</span>}
             </button>
@@ -832,6 +842,26 @@ export default function App() {
             openWindow('commandAI');
           }}
           onAcknowledge={(id) => {}}
+        />
+      </WindowManager>
+
+      {/* 1d. Emergency Route Finder Window */}
+      <WindowManager
+        win={windows.routeFinder}
+        onUpdate={updateWindow}
+        onClose={() => closeWindow('routeFinder')}
+        onFocus={() => focusWindow('routeFinder')}
+      >
+        <RouteFinderWindow
+          serverUrl={SERVER}
+          areaId={selectedAreaId}
+          onRoutesCalculated={(rList, firstId) => {
+            setRoutes(rList);
+            if (firstId !== null) setSelectedRouteId(firstId);
+          }}
+          selectedRouteId={selectedRouteId}
+          onSelectRoute={(id) => setSelectedRouteId(id)}
+          onDispatchTask={(title, entityId) => handleDispatch(undefined, title, entityId)}
         />
       </WindowManager>
 

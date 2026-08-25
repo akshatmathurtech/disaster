@@ -6,7 +6,8 @@ export type WindowId =
   | 'incident'
   | 'grid'
   | 'alertFeed'
-  | 'resourceBoard';
+  | 'resourceBoard'
+  | 'routeFinder';
 
 export interface WindowState {
   id: WindowId;
@@ -48,6 +49,19 @@ export const DEFAULT_WINDOWS: Record<WindowId, WindowState> = {
     width: 420,
     height: 480,
     zIndex: 2020,
+  },
+  routeFinder: {
+    id: 'routeFinder',
+    title: '🧭 Emergency Route Finder (A* & Yen K=5)',
+    icon: '🧭',
+    isOpen: true,
+    isMinimized: false,
+    isMaximized: false,
+    x: 320,
+    y: 60,
+    width: 580,
+    height: 520,
+    zIndex: 2090,
   },
   resourceBoard: {
     id: 'resourceBoard',
@@ -128,3 +142,4 @@ export const DEFAULT_WINDOWS: Record<WindowId, WindowState> = {
     zIndex: 2080,
   },
 };
+

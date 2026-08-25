@@ -108,6 +108,74 @@ export interface SyncBatchResponse {
   server_timestamp: string;
 }
 
+export type TrafficLevel = 'low' | 'moderate' | 'heavy';
+export type SafetyCondition = 'safe' | 'cautious' | 'dangerous';
+export type RouteLengthCategory = 'short' | 'medium' | 'long';
+
+export interface RoadNode {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  type: 'INTERSECTION' | 'HOSPITAL' | 'SHELTER' | 'CHECKPOINT' | 'WAYPOINT';
+}
+
+export interface RoadEdge {
+  id: string;
+  source: string;
+  target: string;
+  roadName: string;
+  distanceKm: number;
+  baseSpeedKmh: number;
+  entityId?: string;
+  coordinates: LocationCoordinates[];
+}
+
+export interface RouteSegmentStatus {
+  edgeId: string;
+  roadName: string;
+  entityId?: string;
+  entityState?: OperationalStateValue;
+  penaltyMultiplier: number;
+}
+
+export interface RouteDetail {
+  routeId: number;
+  name: string;
+  distanceKm: number;
+  estimatedTimeMin: number;
+  traffic: TrafficLevel;
+  safety: SafetyCondition;
+  routeLengthClassification: RouteLengthCategory;
+  color: string;
+  pathNodeIds: string[];
+  coordinates: LocationCoordinates[];
+  segments: RouteSegmentStatus[];
+}
+
+export interface AIRouteInsight {
+  routeId: number;
+  summary: string;
+  advantages: string[];
+  disadvantages: string[];
+  potentialConcerns: string[];
+  preferableWhen: string;
+}
+
+export interface RouteSearchResponse {
+  sourceNode: RoadNode;
+  destNode: RoadNode;
+  routes: RouteDetail[];
+  aiAnalysis: {
+    overview: string;
+    insights: AIRouteInsight[];
+    generatedAt: string;
+  };
+  totalRoutesFound: number;
+  calculatedAt: string;
+}
+
+
 export function calculateFreshness(observedAtIso: string, validDurationMinutes: number = 60): FreshnessInfo {
   const observedTime = new Date(observedAtIso).getTime();
   const validUntilTime = observedTime + validDurationMinutes * 60 * 1000;
@@ -346,7 +414,81 @@ app.get('/api/audit', (req, res) => {
   res.json({ logs: auditLogs, deltas: deltasHistory });
 });
 
+/* ── Route Engine APIs ───────────────────────────────────────────────── */
+import { getGraphForArea } from './routing/graphData';
+import { SimulatedTrafficProvider } from './routing/trafficProvider';
+import { runYensKShortestPaths, buildRouteDetails } from './routing/pathfinding';
+import { generateAIRouteAnalysis } from './routing/aiRouteService';
+
+app.get('/api/routes/nodes', (req, res) => {
+  const areaId = req.query.area as string;
+  const { nodes } = getGraphForArea(areaId);
+  res.json({
+    nodes,
+    total: nodes.length,
+  });
+});
+
+app.get('/api/routes', (req, res) => {
+  const areaId = req.query.area as string;
+  const { nodes, edges } = getGraphForArea(areaId);
+
+  const nodesMap = new Map<string, RoadNode>(nodes.map(n => [n.id, n]));
+  const edgesMap = new Map<string, RoadEdge>(edges.map(e => [e.id, e]));
+
+  const defaultFrom = nodes[0]?.id || 'node-south-entry';
+  const defaultTo = nodes[3]?.id || 'node-shelter-alpha';
+
+  const fromId = (req.query.from as string) || defaultFrom;
+  const toId = (req.query.to as string) || defaultTo;
+
+  const sourceNode = nodesMap.get(fromId) || nodes[0];
+  const destNode = nodesMap.get(toId) || nodes[nodes.length - 1];
+
+  if (!sourceNode || !destNode) {
+    return res.status(400).json({ error: 'Invalid source or destination node ID' });
+  }
+
+  if (sourceNode.id === destNode.id) {
+    const response: RouteSearchResponse = {
+      sourceNode,
+      destNode,
+      routes: [],
+      aiAnalysis: {
+        overview: `Origin and Destination locations are identical (${sourceNode.name}). No route calculation required as dispatch target is already at the target location.`,
+        insights: [],
+        generatedAt: new Date().toISOString(),
+      },
+      totalRoutesFound: 0,
+      calculatedAt: new Date().toISOString(),
+    };
+    return res.json(response);
+  }
+
+  // Evaluate dynamic weights based on current server entities state
+  const trafficProvider = new SimulatedTrafficProvider(entities);
+
+  // Compute top 5 alternative routes via Yen's K-Shortest Path algorithm
+  const paths = runYensKShortestPaths(nodesMap, edgesMap, sourceNode.id, destNode.id, trafficProvider, 5);
+  const routes = buildRouteDetails(paths, nodesMap, edgesMap, trafficProvider);
+
+  // Generate AI Route Analysis
+  const aiAnalysis = generateAIRouteAnalysis(routes, sourceNode.name, destNode.name);
+
+  const response: RouteSearchResponse = {
+    sourceNode,
+    destNode,
+    routes,
+    aiAnalysis,
+    totalRoutesFound: routes.length,
+    calculatedAt: new Date().toISOString(),
+  };
+
+  res.json(response);
+});
+
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`[API Server] Running on http://localhost:${PORT}`);
 });
+

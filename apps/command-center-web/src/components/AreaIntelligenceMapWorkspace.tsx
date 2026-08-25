@@ -3,11 +3,15 @@ import * as L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Entity, Conflict, AreaIntelligence } from '../App';
 import MapControls from './MapControls';
+import { RouteDetail, LocationCoordinates } from '@disaster/protocol';
 
 interface MapProps {
   areaData: AreaIntelligence | null;
   entities: Entity[];
   conflicts: Conflict[];
+  routes?: RouteDetail[];
+  selectedRouteId?: number | null;
+  onSelectRoute?: (routeId: number) => void;
   activeLayers: {
     infrastructure: boolean;
     water_sources: boolean;
@@ -15,6 +19,7 @@ interface MapProps {
     field_units: boolean;
     uncertainty: boolean;
     flood_exposure: boolean;
+    routes?: boolean;
   };
   onSelectEntity: (e: Entity) => void;
 }
@@ -35,7 +40,7 @@ const typeIcon = (type: string) => {
 };
 
 export default function AreaIntelligenceMapWorkspace({
-  areaData, entities, conflicts, activeLayers, onSelectEntity,
+  areaData, entities, conflicts, routes, selectedRouteId, onSelectRoute, activeLayers, onSelectEntity,
 }: MapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInst = useRef<L.Map | null>(null);
@@ -62,6 +67,7 @@ export default function AreaIntelligenceMapWorkspace({
     layers.current.water     = L.layerGroup().addTo(map);
     layers.current.flood     = L.layerGroup().addTo(map);
     layers.current.uncertain = L.layerGroup().addTo(map);
+    layers.current.routes    = L.layerGroup().addTo(map);
     layers.current.markers   = L.layerGroup().addTo(map);
 
     mapInst.current = map;
@@ -134,6 +140,73 @@ export default function AreaIntelligenceMapWorkspace({
       }
     });
   }, [entities, activeLayers.uncertainty]);
+
+  // 5 Emergency Routes rendering layer
+  useEffect(() => {
+    layers.current.routes?.clearLayers();
+    if (!routes || routes.length === 0) return;
+
+    // Render non-selected routes first, then selected route on top
+    const sortedRoutes = [...routes].sort((a, b) => {
+      if (a.routeId === selectedRouteId) return 1;
+      if (b.routeId === selectedRouteId) return -1;
+      return 0;
+    });
+
+    sortedRoutes.forEach(r => {
+      const isSelected = selectedRouteId === r.routeId;
+      const latLngs = r.coordinates.map((c: LocationCoordinates) => [c.lat, c.lng] as [number, number]);
+
+      if (latLngs.length < 2) return;
+
+      const polyline = L.polyline(latLngs, {
+        color: r.color,
+        weight: isSelected ? 7 : 4,
+        opacity: isSelected ? 0.95 : 0.45,
+        dashArray: isSelected ? undefined : '8 6',
+        lineCap: 'round',
+        lineJoin: 'round',
+      });
+
+      const tooltipContent = `
+        <div style="font-family:Inter,sans-serif;font-size:11px;">
+          <div style="font-weight:700;color:${r.color};">ROUTE ${r.routeId} (${r.name})</div>
+          <div>${r.estimatedTimeMin} min • ${r.distanceKm} km</div>
+          <div>Traffic: <b>${r.traffic.toUpperCase()}</b> | Safety: <b>${r.safety.toUpperCase()}</b></div>
+        </div>
+      `;
+
+      polyline.bindTooltip(tooltipContent, { className: 'eoc-tooltip', sticky: true });
+
+      polyline.on('click', () => {
+        if (onSelectRoute) onSelectRoute(r.routeId);
+      });
+
+      polyline.addTo(layers.current.routes);
+
+      // Start & End markers for the selected route
+      if (isSelected && r.coordinates.length > 0) {
+        const start = r.coordinates[0];
+        const end = r.coordinates[r.coordinates.length - 1];
+
+        const startIcon = L.divIcon({
+          html: `<div style="background:#10b981;color:#000;font-weight:800;font-size:10px;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 0 10px #10b981;">A</div>`,
+          className: '',
+          iconSize: [22, 22],
+        });
+
+        const endIcon = L.divIcon({
+          html: `<div style="background:#ef4444;color:#fff;font-weight:800;font-size:10px;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 0 10px #ef4444;">B</div>`,
+          className: '',
+          iconSize: [22, 22],
+        });
+
+        L.marker([start.lat, start.lng], { icon: startIcon }).addTo(layers.current.routes);
+        L.marker([end.lat, end.lng], { icon: endIcon }).addTo(layers.current.routes);
+      }
+    });
+  }, [routes, selectedRouteId, onSelectRoute]);
+
 
   // Entity + incident + unit markers
   useEffect(() => {
