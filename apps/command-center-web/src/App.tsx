@@ -223,6 +223,14 @@ export default function App() {
         suggestedAction: alert.suggestedAction,
         acknowledged: alert.acknowledged,
       }));
+      setCitizenIncidents((a.alerts || []).map((alert: any) => ({
+        id: alert.affectedEntityId || alert.id,
+        name: alert.title,
+        sev: String(alert.severity || 'HIGH').toLowerCase(),
+        sub: `${alert.description || 'Citizen report'} · ${alert.location?.address || 'Live location'}`,
+        time: fmtAge(alert.observedAt),
+        icon: alert.severity === 'CRITICAL' ? '🚨' : '⚠️',
+      })));
       setActiveEvents(existing => {
         const scriptedAlerts = existing.filter(event => !event.id.startsWith('citizen-'));
         const existingCitizenIds = new Set(citizenAlerts.map(event => event.id));
@@ -239,6 +247,7 @@ export default function App() {
   const [simRunning, setSimRunning] = useState<boolean>(true);
   const [simSeconds, setSimSeconds] = useState<number>(0);
   const [activeEvents, setActiveEvents] = useState<SimEvent[]>([]);
+  const [citizenIncidents, setCitizenIncidents] = useState<IncidentData[]>([]);
 
   // Simulation Clock: 1 real second = 1 sim minute
   useEffect(() => {
@@ -314,6 +323,7 @@ export default function App() {
   /* Derived */
   const staleList = entities.filter(e => e.is_stale);
   const freshList = entities.filter(e => !e.is_stale && !e.has_conflict);
+  const liveIncidents = [...citizenIncidents, ...DEMO_INCIDENTS];
 
   /* Window helpers */
   const toggleWindow = (id: WindowId) => {
@@ -752,10 +762,10 @@ export default function App() {
           <div className="rps">
             <div className="rps-hdr">
               🚨 Active Incidents
-              <span className="rp-badge rp-badge-danger">{DEMO_INCIDENTS.length}</span>
+              <span className="rp-badge rp-badge-danger">{liveIncidents.length}</span>
             </div>
             <div className="rps-body">
-              {DEMO_INCIDENTS.map(inc => (
+              {liveIncidents.map(inc => (
                 <div key={inc.id} className={`inc-item inc-sev-${inc.sev}`} onClick={() => openIncident(inc)}>
                   <span className="inc-icon">{inc.icon}</span>
                   <div>
@@ -861,7 +871,7 @@ export default function App() {
           conflictCount={conflicts.length}
           staleEntities={staleList.map(e => ({ name: e.name, current_state: e.current_state, ageStr: fmtAge(e.last_observed_at) }))}
           conflicts={conflicts.map(c => ({ entity_name: c.entity_name, count: c.conflicting_deltas.length }))}
-          incidents={DEMO_INCIDENTS}
+          incidents={liveIncidents}
         />
       </WindowManager>
 
