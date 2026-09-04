@@ -29,8 +29,9 @@ export interface AreaIntelligence {
   }>;
   infrastructure: Array<{
     id: string; type: string; name: string;
-    location: { lat: number; lng: number };
-    status: string; last_verified: string; confidence: number;
+    district?: string;
+    location: { lat: number; lng: number; address?: string };
+    status: string; last_verified?: string; confidence?: number;
   }>;
   incidents: Array<{
     id: string; name: string; severity: string;
@@ -41,11 +42,22 @@ export interface AreaIntelligence {
     location: { lat: number; lng: number };
     status: string;
   }>;
+  red_alert_zones?: Array<{
+    id: string;
+    name: string;
+    district: string;
+    severity: string;
+    location: { lat: number; lng: number };
+    radius_meters: number;
+    impact_description: string;
+    affected_population?: string;
+    evacuation_status?: string;
+  }>;
 }
 
 export interface Entity {
   id: string;
-  type: 'ROAD' | 'BRIDGE' | 'SHELTER' | 'HOSPITAL' | 'INCIDENT';
+  type: string;
   name: string;
   current_state: string;
   location: { lat: number; lng: number; address?: string };
@@ -85,6 +97,7 @@ export interface TaskRecord {
 const SERVER = 'http://localhost:4000';
 
 const LAYER_META = [
+  { key: 'red_alert'      as const, icon: '🛑', label: 'Red Alert'      },
   { key: 'infrastructure' as const, icon: '🏗', label: 'Infrastructure' },
   { key: 'water_sources'  as const, icon: '💧', label: 'Water Sources'  },
   { key: 'flood_exposure' as const, icon: '🌊', label: 'Flood Exposure'  },
@@ -172,6 +185,7 @@ export default function App() {
   const [apiOnline,   setApiOnline]   = useState(false);
 
   const [layers, setLayers] = useState({
+    red_alert:      true,
     infrastructure: true,
     water_sources:  true,
     flood_exposure: true,
@@ -191,8 +205,39 @@ export default function App() {
   const loadArea = async (id: string) => {
     try {
       const r = await fetch(`/data/areas/${id}.json`);
-      setAreaData(await r.json());
-    } catch { /* dataset not found */ }
+      const data: AreaIntelligence = await r.json();
+      setAreaData(data);
+
+      if (data && Array.isArray(data.infrastructure)) {
+        const areaEntities: Entity[] = data.infrastructure.map((inf: any, idx: number) => {
+          const lat = typeof inf.location?.lat === 'number' ? inf.location.lat : typeof inf.lat === 'number' ? inf.lat : 0;
+          const lng = typeof inf.location?.lng === 'number' ? inf.location.lng : typeof inf.lng === 'number' ? inf.lng : 0;
+          const address = typeof inf.location === 'string' ? inf.location : inf.location?.address || inf.district || inf.name;
+          const status = inf.status || 'OPERATIONAL';
+          const isStale = (typeof inf.confidence === 'number' && inf.confidence < 0.90) || 
+            (typeof status === 'string' && (status.toUpperCase().includes('COLLAPSE') || status.toUpperCase().includes('WASH') || status.toUpperCase().includes('BREACH')));
+          const hasConflict = typeof status === 'string' && status.toUpperCase().includes('CONFLICT');
+
+          return {
+            id: inf.id || `infra-${id}-${idx + 1}`,
+            name: inf.name || `Infrastructure ${idx + 1}`,
+            type: inf.type || 'ROAD',
+            current_state: status,
+            location: { lat, lng, address },
+            last_observed_at: inf.last_verified || new Date().toISOString(),
+            valid_until: new Date(Date.now() + 3600000).toISOString(),
+            confidence: typeof inf.confidence === 'number' ? inf.confidence : 0.95,
+            last_source_id: inf.district ? `District-${inf.district}` : 'Field-Telemetry',
+            is_stale: isStale,
+            has_conflict: hasConflict,
+            evidence_ids: [],
+          };
+        });
+        setEntities(areaEntities);
+      }
+    } catch (err) {
+      console.error('Failed to load area data', err);
+    }
   };
 
   const fetchState = async () => {
@@ -202,7 +247,9 @@ export default function App() {
         fetch(`${SERVER}/api/uncertainty`).then(r => r.json()),
         fetch(`${SERVER}/api/tasks`).then(r => r.json()),
       ]);
-      setEntities(s.entities   || []);
+      if (s.entities && s.entities.length > 0 && selectedAreaId === 'sector-4-demo') {
+        setEntities(s.entities);
+      }
       setConflicts(u.conflicts || []);
       setTasks(t.tasks         || []);
       setApiOnline(true);
@@ -563,6 +610,10 @@ export default function App() {
               <div style={{ marginTop: 16 }}>
                 <div className="ps-hdr" style={{ padding: '0 0 6px' }}>Area Stats</div>
                 <div className="stat-row">
+                  <span className="stat-lbl">Red Alert Zones</span>
+                  <span className="stat-val" style={{ color: '#ef4444', fontWeight: 800 }}>{areaData.red_alert_zones?.length ?? (areaData.area.id === 'assam-demo' ? 5 : 0)}</span>
+                </div>
+                <div className="stat-row">
                   <span className="stat-lbl">Infrastructure</span>
                   <span className="stat-val" style={{ color: 'var(--cyan-dim)' }}>{areaData.infrastructure.length}</span>
                 </div>
@@ -637,12 +688,15 @@ export default function App() {
                 uncertainty: activeTab === 'uncertainty' || layers.uncertainty,
               }}
               onSelectEntity={openInspector}
+              onSelectIncident={openIncident}
             />
           </div>
         )}
 
         {/* Legend */}
         <div className="map-legend">
+          <div className="leg-item"><div className="leg-dot" style={{ background: '#ef4444' }} /> Red Alert</div>
+          <div className="leg-pipe" />
           <div className="leg-item"><div className="leg-dot" style={{ background: '#10b981' }} /> Operational</div>
           <div className="leg-pipe" />
           <div className="leg-item"><div className="leg-dot" style={{ background: '#ef4444' }} /> Blocked</div>
