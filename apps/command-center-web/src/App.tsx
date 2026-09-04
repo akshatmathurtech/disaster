@@ -203,14 +203,34 @@ export default function App() {
 
   const fetchState = async () => {
     try {
-      const [s, u, t] = await Promise.all([
+      const [s, u, t, a] = await Promise.all([
         fetch(`${SERVER}/api/state`).then(r => r.json()),
         fetch(`${SERVER}/api/uncertainty`).then(r => r.json()),
         fetch(`${SERVER}/api/tasks`).then(r => r.json()),
+        fetch(`${SERVER}/api/alerts`).then(r => r.json()),
       ]);
       setEntities(s.entities   || []);
       setConflicts(u.conflicts || []);
       setTasks(t.tasks         || []);
+      const citizenAlerts: SimEvent[] = (a.alerts || []).map((alert: any) => ({
+        id: `citizen-${alert.id}`,
+        simTimeMinutes: 0,
+        title: alert.title,
+        severity: alert.severity === 'CRITICAL' ? 'CRITICAL' : alert.severity === 'MEDIUM' ? 'MEDIUM' : 'HIGH',
+        category: 'MEDICAL',
+        description: `${alert.description} (${alert.location?.address || `${alert.location?.lat}, ${alert.location?.lng}`})`,
+        affectedEntityId: alert.affectedEntityId,
+        suggestedAction: alert.suggestedAction,
+        acknowledged: alert.acknowledged,
+      }));
+      setActiveEvents(existing => {
+        const scriptedAlerts = existing.filter(event => !event.id.startsWith('citizen-'));
+        const existingCitizenIds = new Set(citizenAlerts.map(event => event.id));
+        return [
+          ...citizenAlerts,
+          ...scriptedAlerts.filter(event => !existingCitizenIds.has(event.id)),
+        ];
+      });
       setApiOnline(true);
     } catch { setApiOnline(false); }
   };
@@ -357,7 +377,7 @@ export default function App() {
     openWindow('incident');
   };
 
-  const handleDispatch = async (ev?: React.FormEvent, customTitle?: string, customEntity?: string) => {
+  const handleDispatch = async (ev?: React.FormEvent, customTitle?: string, customEntity?: string, assignedUnitId = 'unit-17') => {
     if (ev) ev.preventDefault();
     const title = customTitle || taskTitle;
     const entity_id = customEntity || taskEntity;
@@ -367,7 +387,7 @@ export default function App() {
       await fetch(`${SERVER}/api/tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, entity_id: entity_id || 'general', assigned_unit_id: 'unit-17', priority: 'HIGH' }),
+        body: JSON.stringify({ title, entity_id: entity_id || 'general', assigned_unit_id: assignedUnitId, priority: 'HIGH' }),
       });
       setTaskTitle(''); setTaskEntity('');
       fetchState();
@@ -379,7 +399,7 @@ export default function App() {
           title,
           description: 'Local dispatch task',
           entity_id: entity_id || 'general',
-          assigned_unit_id: 'Unit-17',
+          assigned_unit_id: assignedUnitId,
           priority: 'HIGH',
           status: 'OPEN',
           created_at: new Date().toISOString(),
@@ -387,6 +407,18 @@ export default function App() {
         ...prev,
       ]);
     }
+  };
+
+  const resolveConflict = async (conflict: Conflict) => {
+    const candidate = [...conflict.conflicting_deltas]
+      .sort((a, b) => new Date(b.observed_at).getTime() - new Date(a.observed_at).getTime())[0];
+    if (!candidate) return;
+    const response = await fetch(`${SERVER}/api/conflicts/${conflict.conflict_id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resolved_state: candidate.new_state, resolution_notes: 'Accepted latest observed report.' }),
+    });
+    if (response.ok) fetchState();
   };
 
   const toggleLayer = (k: keyof typeof layers) =>
@@ -698,7 +730,7 @@ export default function App() {
                 </div>
               ))}
               {conflicts.map(c => (
-                <div key={c.conflict_id} className="unc-card conflict" onClick={() => openWindow('commandAI')}>
+                <div key={c.conflict_id} className="unc-card conflict">
                   <div className="unc-card-hdr">
                     <span className="unc-name">{c.entity_name}</span>
                     <span className="unc-badge unc-badge-conflict">CONFLICT</span>
@@ -707,7 +739,10 @@ export default function App() {
                     <span className="unc-key">Reports</span>
                     <span className="unc-val unc-val-danger">{c.conflicting_deltas.length} conflicting</span>
                   </div>
-                  <div className="unc-action">→ Run AI Conflict Triage</div>
+                  <div className="unc-action" onClick={() => openWindow('commandAI')}>→ Run AI Conflict Triage</div>
+                  <button type="button" className="btn-alert-ack" onClick={() => resolveConflict(c)}>
+                    ACCEPT LATEST REPORT
+                  </button>
                 </div>
               ))}
             </div>
@@ -842,7 +877,14 @@ export default function App() {
           onAskAIAboutAlert={(alert) => {
             openWindow('commandAI');
           }}
-          onAcknowledge={(id) => {}}
+          onAcknowledge={async (id) => {
+            if (!id.startsWith('citizen-')) return;
+            await fetch(`${SERVER}/api/alerts/${id.slice('citizen-'.length)}/acknowledge`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ acknowledged_by: 'command-center' }),
+            });
+          }}
         />
       </WindowManager>
 
@@ -874,7 +916,7 @@ export default function App() {
         onFocus={() => focusWindow('resourceBoard')}
       >
         <ResourceBoardWindow
-          onDispatchUnit={(unitId, taskTitle) => handleDispatch(undefined, taskTitle, unitId)}
+          onDispatchUnit={(unitId, taskTitle) => handleDispatch(undefined, taskTitle, 'general', unitId)}
         />
       </WindowManager>
 
