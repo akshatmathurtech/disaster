@@ -59,6 +59,15 @@ export interface AreaIntelligence {
     affected_population?: string;
     evacuation_status?: string;
   }>;
+  no_contact_zones?: Array<{
+    id: string;
+    name: string;
+    district?: string;
+    location: { lat: number; lng: number };
+    radius_meters?: number;
+    description?: string;
+    is_close_to_flood?: boolean;
+  }>;
 }
 
 export interface Entity {
@@ -103,6 +112,7 @@ export interface TaskRecord {
 const SERVER = 'http://localhost:4000';
 
 const LAYER_META = [
+  { key: 'no_contact'     as const, icon: '📵', label: 'No Contact'     },
   { key: 'water_sources'  as const, icon: '💧', label: 'Water Sources'  },
   { key: 'flood_exposure' as const, icon: '🌊', label: 'Flood Exposure'  },
   { key: 'red_alert'      as const, icon: '🛑', label: 'Red Alert'      },
@@ -191,6 +201,7 @@ export default function App() {
   const [apiOnline,   setApiOnline]   = useState(false);
 
   const [layers, setLayers] = useState({
+    no_contact:     true,
     red_alert:      false,
     infrastructure: false,
     water_sources:  false,
@@ -616,6 +627,10 @@ export default function App() {
               <div style={{ marginTop: 16 }}>
                 <div className="ps-hdr" style={{ padding: '0 0 6px' }}>Area Stats</div>
                 <div className="stat-row">
+                  <span className="stat-lbl">No Contact Zones</span>
+                  <span className="stat-val" style={{ color: '#eab308', fontWeight: 800 }}>{areaData.no_contact_zones?.length ?? (areaData.area.id === 'assam-demo' ? 5 : 0)}</span>
+                </div>
+                <div className="stat-row">
                   <span className="stat-lbl">Red Alert Zones</span>
                   <span className="stat-val" style={{ color: '#ef4444', fontWeight: 800 }}>{areaData.red_alert_zones?.length ?? (areaData.area.id === 'assam-demo' ? 5 : 0)}</span>
                 </div>
@@ -701,6 +716,10 @@ export default function App() {
 
         {/* Legend */}
         <div className="map-legend">
+          <div className="leg-item"><div className="leg-ring" style={{ borderColor: '#eab308', borderStyle: 'dashed' }} /> No Contact (Safe)</div>
+          <div className="leg-pipe" />
+          <div className="leg-item"><div className="leg-ring" style={{ borderColor: '#ef4444', borderStyle: 'dashed' }} /> No Contact (Flood Risk)</div>
+          <div className="leg-pipe" />
           <div className="leg-item"><div className="leg-dot" style={{ background: '#ef4444' }} /> Red Alert</div>
           <div className="leg-pipe" />
           <div className="leg-item"><div className="leg-dot" style={{ background: '#10b981' }} /> Operational</div>
@@ -708,8 +727,6 @@ export default function App() {
           <div className="leg-item"><div className="leg-dot" style={{ background: '#ef4444' }} /> Blocked</div>
           <div className="leg-pipe" />
           <div className="leg-item"><div className="leg-ring" style={{ borderColor: '#f59e0b' }} /> Stale Zone</div>
-          <div className="leg-pipe" />
-          <div className="leg-item"><div className="leg-ring" style={{ borderColor: '#ef4444' }} /> Conflict</div>
           <div className="leg-pipe" />
           <div className="leg-item"><div className="leg-box" style={{ background: '#38bdf8' }} /> Flood Risk</div>
         </div>
