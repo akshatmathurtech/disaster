@@ -26,6 +26,12 @@ export interface AreaIntelligence {
     id: string; name: string; type: string;
     location: { lat: number; lng: number };
     risk_radius_meters: number;
+    path_coordinates?: Array<[number, number]>;
+    flood_zones?: Array<{
+      name: string;
+      location: { lat: number; lng: number };
+      radius_meters: number;
+    }>;
   }>;
   infrastructure: Array<{
     id: string; type: string; name: string;
@@ -97,10 +103,10 @@ export interface TaskRecord {
 const SERVER = 'http://localhost:4000';
 
 const LAYER_META = [
-  { key: 'red_alert'      as const, icon: '🛑', label: 'Red Alert'      },
-  { key: 'infrastructure' as const, icon: '🏗', label: 'Infrastructure' },
   { key: 'water_sources'  as const, icon: '💧', label: 'Water Sources'  },
   { key: 'flood_exposure' as const, icon: '🌊', label: 'Flood Exposure'  },
+  { key: 'red_alert'      as const, icon: '🛑', label: 'Red Alert'      },
+  { key: 'infrastructure' as const, icon: '🏗', label: 'Infrastructure' },
   { key: 'incidents'      as const, icon: '🚨', label: 'Incidents'       },
   { key: 'field_units'    as const, icon: '📱', label: 'Field Units'     },
   { key: 'uncertainty'    as const, icon: '⚠',  label: 'Uncertainty'     },
@@ -174,7 +180,7 @@ function AwarenessGauge({ fresh, stale, conflict }: { fresh: number; stale: numb
 export default function App() {
   const now = useClock();
 
-  const [selectedAreaId, setSelectedAreaId] = useState<'sector-4-demo' | 'assam-demo' | 'delhi-demo'>('sector-4-demo');
+  const [selectedAreaId, setSelectedAreaId] = useState<'sector-4-demo' | 'assam-demo' | 'delhi-demo'>('assam-demo');
   const [areaData,    setAreaData]    = useState<AreaIntelligence | null>(null);
   const [entities,    setEntities]    = useState<Entity[]>([]);
   const [conflicts,   setConflicts]   = useState<Conflict[]>([]);
@@ -185,13 +191,13 @@ export default function App() {
   const [apiOnline,   setApiOnline]   = useState(false);
 
   const [layers, setLayers] = useState({
-    red_alert:      true,
-    infrastructure: true,
-    water_sources:  true,
-    flood_exposure: true,
-    incidents:      true,
-    field_units:    true,
-    uncertainty:    true,
+    red_alert:      false,
+    infrastructure: false,
+    water_sources:  false,
+    flood_exposure: false,
+    incidents:      false,
+    field_units:    false,
+    uncertainty:    false,
   });
 
   // Windows State Management
@@ -566,7 +572,7 @@ export default function App() {
         <div className="ps">
           <div className="ps-hdr">Area Intelligence</div>
           <div className="ps-body">
-            {(['sector-4-demo','assam-demo','delhi-demo'] as const).map(id => (
+            {(['assam-demo','sector-4-demo','delhi-demo'] as const).map(id => (
               <div
                 key={id}
                 className={`area-item ${selectedAreaId === id ? 'active' : ''}`}

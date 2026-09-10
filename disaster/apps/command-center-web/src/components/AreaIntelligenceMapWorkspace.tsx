@@ -78,6 +78,7 @@ export default function AreaIntelligenceMapWorkspace({
     layers.current.red_alert = L.layerGroup().addTo(map);
     layers.current.uncertain = L.layerGroup().addTo(map);
     layers.current.markers   = L.layerGroup().addTo(map);
+    layers.current.routes    = L.layerGroup().addTo(map);
 
     mapInst.current = map;
     return () => { map.remove(); mapInst.current = null; };
@@ -121,22 +122,103 @@ export default function AreaIntelligenceMapWorkspace({
 
     if (activeLayers.water_sources) {
       areaData.water_sources.forEach(w => {
-        L.circle([w.location.lat, w.location.lng], {
-          radius: 300, color: '#0284c7', weight: 2,
-          fillColor: '#0284c7', fillOpacity: 0.35,
-        })
-          .bindTooltip(`💧 ${w.name}`, { className: 'eoc-tooltip', permanent: false })
-          .addTo(layers.current.water);
+        if (w.path_coordinates && w.path_coordinates.length > 1) {
+          // River outer glow casing (sleek, thinner width)
+          const riverGlow = L.polyline(w.path_coordinates, {
+            color: '#0284c7',
+            weight: 4.5,
+            opacity: 0.35,
+            lineCap: 'round',
+            lineJoin: 'round',
+          });
+
+          // River vibrant core line (crisp, slim width)
+          const riverLine = L.polyline(w.path_coordinates, {
+            color: '#38bdf8',
+            weight: 2,
+            opacity: 0.95,
+            lineCap: 'round',
+            lineJoin: 'round',
+          });
+
+          const tooltipHtml = `
+            <div style="font-family:Inter,sans-serif;font-size:12px;padding:2px 0;">
+              <div style="font-weight:700;color:#38bdf8;display:flex;align-items:center;gap:5px;">
+                <span>🌊 ${w.name}</span>
+              </div>
+              <div style="font-size:10px;color:#94a3b8;margin-top:3px;">
+                River Basin &middot; Inundation Risk Buffer: ${w.risk_radius_meters}m
+              </div>
+            </div>
+          `;
+
+          riverLine.bindTooltip(tooltipHtml, { className: 'eoc-tooltip', sticky: true });
+          riverGlow.bindTooltip(tooltipHtml, { className: 'eoc-tooltip', sticky: true });
+
+          riverGlow.addTo(layers.current.water);
+          riverLine.addTo(layers.current.water);
+
+        } else if (w.location) {
+          L.circle([w.location.lat, w.location.lng], {
+            radius: 300, color: '#0284c7', weight: 2,
+            fillColor: '#0284c7', fillOpacity: 0.35,
+          })
+            .bindTooltip(`💧 ${w.name}`, { className: 'eoc-tooltip', permanent: false })
+            .addTo(layers.current.water);
+        }
       });
     }
 
+    // Flood exposure layer: Highlight affected areas with blue dotted circles
     if (activeLayers.flood_exposure) {
       areaData.water_sources.forEach(w => {
-        L.circle([w.location.lat, w.location.lng], {
-          radius: w.risk_radius_meters, color: '#38bdf8',
-          weight: 1.5, dashArray: '4 6',
-          fillColor: '#38bdf8', fillOpacity: 0.1,
-        }).addTo(layers.current.flood);
+        const zonesToRender = (w as any).flood_zones && (w as any).flood_zones.length > 0
+          ? (w as any).flood_zones
+          : [{ name: `${w.name} Inundation Zone`, location: w.location, radius_meters: w.risk_radius_meters || 5000 }];
+
+        zonesToRender.forEach((zone: any) => {
+          if (!zone.location || typeof zone.location.lat !== 'number' || typeof zone.location.lng !== 'number') return;
+
+          // Outer blue dotted / dashed circle
+          const outerCircle = L.circle([zone.location.lat, zone.location.lng], {
+            radius: zone.radius_meters || 5000,
+            color: '#38bdf8',
+            weight: 2,
+            dashArray: '5 6',
+            fillColor: '#0284c7',
+            fillOpacity: 0.16,
+          });
+
+          // Inner core surge dotted circle
+          const innerCircle = L.circle([zone.location.lat, zone.location.lng], {
+            radius: Math.floor((zone.radius_meters || 5000) * 0.45),
+            color: '#0ea5e9',
+            weight: 1.5,
+            dashArray: '3 4',
+            fillColor: '#38bdf8',
+            fillOpacity: 0.22,
+          });
+
+          const tooltipHtml = `
+            <div style="font-family:Inter,sans-serif;font-size:12px;padding:2px 0;">
+              <div style="font-weight:700;color:#38bdf8;display:flex;align-items:center;gap:5px;">
+                <span>🌊 Flood Exposure Risk Zone</span>
+              </div>
+              <div style="font-size:11px;color:#ffffff;font-weight:600;margin-top:2px;">
+                ${zone.name}
+              </div>
+              <div style="font-size:10px;color:#93c5fd;margin-top:2px;">
+                Dotted Perimeter Buffer: ${zone.radius_meters || 5000}m
+              </div>
+            </div>
+          `;
+
+          outerCircle.bindTooltip(tooltipHtml, { className: 'eoc-tooltip', direction: 'top', offset: [0, -6] });
+          innerCircle.bindTooltip(tooltipHtml, { className: 'eoc-tooltip', direction: 'top', offset: [0, -6] });
+
+          outerCircle.addTo(layers.current.flood);
+          innerCircle.addTo(layers.current.flood);
+        });
       });
     }
   }, [areaData, activeLayers.water_sources, activeLayers.flood_exposure]);
@@ -450,9 +532,16 @@ export default function AreaIntelligenceMapWorkspace({
         .infra-badge-marker, .unit-badge-marker {
           transition: transform 0.15s ease, box-shadow 0.15s ease;
         }
-        .inc-div-icon, .infra-div-icon, .unit-div-icon, .red-alert-div-icon {
+        .inc-div-icon, .infra-div-icon, .unit-div-icon, .red-alert-div-icon, .river-div-icon {
           background: transparent !important;
           border: none !important;
+        }
+        .river-name-pill {
+          transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+        .river-name-pill:hover {
+          transform: scale(1.15);
+          box-shadow: 0 0 16px rgba(56, 189, 248, 0.8) !important;
         }
         .eoc-tooltip {
           background: rgba(6,14,28,0.96) !important;
